@@ -70,35 +70,67 @@
     background-color: #45a049;
 }
 
-#ptc-custom-modal .form-group {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
+/* Custom Modal Styles */
 
-#ptc-custom-modal .form-group label {
-    margin-right: 10px;
-}
-
-#ptc-custom-modal .form-group .form-input {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
+#ptc-custom-modal .courier-settings {
+    margin-bottom: 20px;
 }
 
 #ptc-custom-modal .row {
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    margin: 0 -10px 15px;
+    /* Negative margin for gutter */
 }
 
 #ptc-custom-modal .form-group {
     flex: 1;
-    margin-right: 10px;
+    padding: 0 10px;
+    /* Gutter */
+    min-width: 200px;
+    /* Prevent squishing */
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
 }
 
-.column-pathao .ptc-open-modal-button {
-    cursor: pointer;
+#ptc-custom-modal .form-group label {
+    font-weight: 600;
+    margin-bottom: 5px;
+    display: block;
+}
 
+#ptc-custom-modal .form-group .form-input {
+    width: 100%;
+}
+
+#ptc-custom-modal .form-group input,
+#ptc-custom-modal .form-group select,
+#ptc-custom-modal .form-group textarea {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    height: 40px;
+    /* Consistent height */
+    margin: 0;
+    padding: 0 12px;
+    /* reduced vertical padding */
+    line-height: 40px;
+    /* Vertically center text for inputs/selects */
+    vertical-align: middle;
+}
+
+#ptc-custom-modal .form-group textarea {
+    height: 80px;
+    /* Taller for textareas */
+    resize: vertical;
+    padding: 8px 12px;
+    line-height: 1.4;
+}
+
+/* Specific overrides */
+#ptc-custom-modal .form-group.ptc-full-width {
+    flex: 1 1 100%;
 }
 
 .pt-field-error-message {
@@ -125,4 +157,51 @@
 
 .ptc-item-btn {
     float: right;
+}
+
+/* Tooltip container */
+.ptc-tooltip {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+    margin-left: 5px;
+}
+
+/* Tooltip text */
+.ptc-tooltip .ptc-tooltiptext {
+    visibility: hidden;
+    width: 140px;
+    background-color: #555;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    /* Position above the icon */
+    left: 50%;
+    margin-left: -70px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 12px;
+    font-weight: normal;
+}
+
+/* Tooltip arrow */
+.ptc-tooltip .ptc-tooltiptext::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #555 transparent transparent transparent;
+}
+
+/* Show the tooltip text when hovering */
+.ptc-tooltip:hover .ptc-tooltiptext {
+    visibility: visible;
+    opacity: 1;
 }

@@ -76,22 +76,32 @@ function ptc_render_store_modal_button($post_id)
     return sprintf('<span class="ptc-assign-area">' . $button . '</span>', $post_id);
 }
 
-function render_form_group($label, $input, $formGroupClass = '')
+function render_form_group($label, $input, $formGroupClass = '', $tooltip = '')
 {
 
     $id = strtolower(str_replace(' ', '-', $label));
 
+    $tooltipHtml = '';
+    if ($tooltip) {
+        $tooltipHtml = sprintf('
+            <div class="ptc-tooltip">
+                <span class="dashicons dashicons-info"></span>
+                <span class="ptc-tooltiptext">%s</span>
+            </div>
+        ', $tooltip);
+    }
+
     return sprintf('
         <div class="form-group %3$s">
             <label for="%1$s">
-                %1$s:
+                %1$s: %5$s
             </label>
             <div class="form-input">
                 %2$s
                 <span id="%4$s" class="pt-field-error-message">error message</span>
             </div>
             
-        </div>', $label, $input, $formGroupClass, "{$id}-error");
+        </div>', $label, $input, $formGroupClass, "{$id}-error", $tooltipHtml);
 }
 
 
@@ -109,9 +119,12 @@ function ptc_render_store_modal_content()
     $addressForm = render_form_group('Address', '<textarea id="ptc_wc_shipping_address" name="address"></textarea>');
 
     $storeForm = render_form_group('Store', '<select id="store" required name="store"><option>Select store</option></select>');
-    $citiesForm = render_form_group('City', '<select id="city" required name="city"><option>Select city</option></select>', 'ptc-field-hub-selection');
-    $zoneForm = render_form_group('Zone', '<select id="zone" required name="zone"><option>Select zone</option></select>', 'ptc-field-hub-selection');
-    $areaForm = render_form_group('Area', '<select id="area" name="area"><option>Select area</option></select>', 'ptc-field-hub-selection');
+    
+    $tooltipText = 'Optional for Bangladesh';
+    
+    $citiesForm = render_form_group('City', '<select id="city" name="city"><option>Select city</option></select>', 'ptc-field-hub-selection', $tooltipText);
+    $zoneForm = render_form_group('Zone', '<select id="zone" name="zone"><option>Select zone</option></select>', 'ptc-field-hub-selection', $tooltipText);
+    $areaForm = render_form_group('Area', '<select id="area" name="area"><option>Select area</option></select>', 'ptc-field-hub-selection', $tooltipText);
 
     $deliveryType = render_form_group('Delivery Type', '
             <select id="ptc_wc_delivery_type" name="ptc_wc_delivery_type">
@@ -185,31 +198,31 @@ function ptc_render_store_modal_content()
                 ' . $phoneForm . '
                 ' . $SecondaryPhoneForm . '
             </div>
+
             <div class="row">
-              <?= render_stores_dropdown(); ?>
-              <?= render_item_type_dropdown(); ?>
-              <?= render_order_type_dropdown(); ?>
+                ' . $addressForm . '
             </div>
-            <div class="row">
-              ' . $orderNumber . '
-              ' . $priceForm . '
-              ' . $weightForm . '
-              ' . $quantityForm . '
-            </div>
-            <div class="row">
-            ' . $addressForm . '
-            ' . $storeForm . '
+
+             <div class="row">
+                ' . $citiesForm . '
+                ' . $zoneForm . '
+                ' . $areaForm . '
             </div>
 
             <div class="row">
-          
-              ' . $citiesForm . '
-              ' . $zoneForm . '
-              ' . $areaForm . '
-           </div>
+                ' . $storeForm . '
+                ' . $orderNumber . '
+                ' . $priceForm . '
+            </div>
+           
             <div class="row">
-              ' . $deliveryType . '
-              ' . $itemType . '
+                ' . $weightForm . '
+                ' . $quantityForm . '
+                ' . $deliveryType . '
+                ' . $itemType . '
+            </div>
+
+            <div class="row">
               ' . $itemDescription . '
               ' . $specialInstruction . '
            </div>
