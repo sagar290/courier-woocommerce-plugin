@@ -146,7 +146,7 @@ function ptc_get_webhook_events()
 function ptc_configure_webhook($access_token, $webhook_url, $webhook_secret)
 {
     $response = wp_safe_remote_post(
-        'https://merchant.pathao.com/api/v1/oauth/client/webhook',
+        get_base_url() . '/api/v1/oauth/client/webhook',
         array(
             'timeout' => 30,
             'redirection' => 3,
@@ -190,6 +190,76 @@ function ptc_configure_webhook($access_token, $webhook_url, $webhook_secret)
     }
 
     return $body;
+}
+
+function ptc_get_webhook_configuration($access_token)
+{
+    $response = wp_safe_remote_get(
+        get_base_url() . '/api/v1/oauth/client',
+        array(
+            'timeout' => 30,
+            'redirection' => 3,
+            'httpversion' => '1.1',
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $access_token,
+                'Accept' => 'application/json',
+            ),
+        )
+    );
+
+    if (is_wp_error($response)) {
+        return $response;
+    }
+
+    $status_code = wp_remote_retrieve_response_code($response);
+    $body = json_decode(wp_remote_retrieve_body($response), true);
+    $body = is_array($body) ? $body : array();
+
+    if ($status_code < 200 || $status_code >= 300 || !empty($body['error'])) {
+        $message = !empty($body['message'])
+            ? sanitize_text_field($body['message'])
+            : __('Could not retrieve the Pathao webhook configuration.', 'pathao-courier');
+
+        return new WP_Error(
+            'pathao_webhook_status_failed',
+            $message,
+            array('status' => $status_code)
+        );
+    }
+
+    return $body;
+}
+
+function ptc_find_webhook_url($data)
+{
+    if (!is_array($data)) {
+        return '';
+    }
+
+    foreach (array('webhook', 'webhook_url', 'callback_url') as $key) {
+        if (!empty($data[$key]) && is_string($data[$key])) {
+            return esc_url_raw($data[$key]);
+        }
+    }
+
+    if (!empty($data['webhook']) && is_array($data['webhook'])) {
+        foreach (array('url', 'webhook_url', 'callback_url') as $key) {
+            if (!empty($data['webhook'][$key]) && is_string($data['webhook'][$key])) {
+                return esc_url_raw($data['webhook'][$key]);
+            }
+        }
+    }
+
+    foreach ($data as $value) {
+        if (is_array($value)) {
+            $webhook_url = ptc_find_webhook_url($value);
+            if ('' !== $webhook_url) {
+                return $webhook_url;
+            }
+        }
+    }
+
+    return '';
 }
 
 function pt_hms_get_user()
