@@ -5,6 +5,7 @@ defined('PTC_PLUGIN_SETTINGS_PAGE_TYPE') || define('PTC_PLUGIN_SETTINGS_PAGE_TYP
 
 add_action('wp_ajax_pathao_verify_credentials', 'pathao_verify_credentials_callback');
 add_action('wp_ajax_pathao_save_settings', 'pathao_save_settings_callback');
+add_action('wp_ajax_pathao_configure_webhook', 'pathao_configure_webhook_callback');
 add_action('wp_ajax_reset_token', 'ajax_reset_token');
 add_action('admin_menu', 'pt_hms_menu_page'); // Admin menu setup, Pathao Courier page
 add_action('admin_menu', 'pt_hms_orders_page'); // submenu settings page
@@ -115,6 +116,68 @@ function pathao_save_settings_callback()
 
     wp_send_json_success(array(
         'message' => __('Settings saved successfully.', 'pathao-courier'),
+    ));
+}
+
+function pathao_configure_webhook_callback()
+{
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array('message' => __('Unauthorized user privileges.', 'pathao-courier')), 403);
+    }
+
+    check_ajax_referer('pathao_webhook_configuration_nonce', 'security');
+
+    $settings = get_option('pt_hms_settings', array());
+    $settings = is_array($settings) ? $settings : array();
+    $webhook_secret = (string)($settings['webhook_secret'] ?? '');
+    if ('' === $webhook_secret) {
+        $webhook_secret = (string)($settings['client_secret'] ?? '');
+    }
+    $webhook_url = rest_url('ptc/v1/webhook');
+
+    if (empty($settings['client_id']) || empty($settings['client_secret']) || '' === $webhook_secret) {
+        wp_send_json_error(array(
+            'message' => __('Save the API credentials and webhook secret before configuring the webhook.', 'pathao-courier'),
+        ), 400);
+    }
+
+    if ('https' !== wp_parse_url($webhook_url, PHP_URL_SCHEME)) {
+        wp_send_json_error(array(
+            'message' => __('The webhook URL must use HTTPS with a valid SSL certificate.', 'pathao-courier'),
+        ), 400);
+    }
+
+    $access_token = pt_hms_get_token();
+    if (!$access_token) {
+        wp_send_json_error(array(
+            'message' => __('Could not obtain a Pathao access token. Test the API credentials again.', 'pathao-courier'),
+        ), 502);
+    }
+
+    $result = ptc_configure_webhook($access_token, $webhook_url, $webhook_secret);
+    if (is_wp_error($result)) {
+        $error_data = $result->get_error_data();
+        $status = is_array($error_data) && !empty($error_data['status'])
+            ? (int)$error_data['status']
+            : 502;
+        $status = $status >= 400 && $status <= 599 ? $status : 502;
+
+        wp_send_json_error(array(
+            'message' => $result->get_error_message(),
+            'checks' => is_array($error_data) && !empty($error_data['checks'])
+                ? $error_data['checks']
+                : array(),
+        ), $status);
+    }
+
+    update_option('pt_hms_webhook_configuration', array(
+        'url' => esc_url_raw($webhook_url),
+        'configured_at' => time(),
+    ));
+
+    wp_send_json_success(array(
+        'message' => __('Webhook configured successfully.', 'pathao-courier'),
+        'url' => esc_url_raw($webhook_url),
     ));
 }
 
@@ -252,11 +315,17 @@ function pt_hms_settings_page_callback()
                         <span class="dashicons dashicons-update" style="margin: 4px 5px 0 0;"></span>
                         Reset Token
                     </button>
+
+                    <button type="button" id="configure-webhook-btn" class="button button-secondary"<?php echo $has_saved_credentials ? '' : ' style="display: none;"'; ?>>
+                        <span class="dashicons dashicons-admin-links" style="margin: 4px 5px 0 0;"></span>
+                        Configure Webhook
+                    </button>
                 </div>
 
                 <div class="ptc-settings-feedback">
                     <span id="pathao-settings-save-feedback" aria-live="polite"></span>
                     <span id="pathao-connection-status-feedback" aria-live="polite"></span>
+                    <span id="pathao-webhook-status-feedback" aria-live="polite"></span>
                 </div>
             </form>
         </div>
@@ -306,14 +375,16 @@ function pt_hms_settings_page_callback()
                 let savedCredentials = {
                     clientId: $('#client_id').val(),
                     clientSecret: $('#client_secret').val(),
-                    environment: $('#client_environment').val()
+                    environment: $('#client_environment').val(),
+                    webhookSecret: $('#webhook_secret').val()
                 };
 
                 function currentCredentials() {
                     return {
                         clientId: $('#client_id').val(),
                         clientSecret: $('#client_secret').val(),
-                        environment: $('#client_environment').val()
+                        environment: $('#client_environment').val(),
+                        webhookSecret: $('#webhook_secret').val()
                     };
                 }
 
@@ -326,16 +397,24 @@ function pt_hms_settings_page_callback()
                         && current.environment === savedCredentials.environment;
                 }
 
-                $('#client_id, #client_secret, #client_environment').on('input change', function () {
-                    if (credentialsMatchSaved()) {
-                        $('#fetch-token-btn, #pathao-save-settings-control').hide();
-                        $('#reset-token-btn').show();
-                        return;
-                    }
+                function updateSettingsActionState() {
+                    const webhookMatchesSaved = currentCredentials().webhookSecret === savedCredentials.webhookSecret;
 
-                    $('#fetch-token-btn').show();
-                    $('#pathao-save-settings-control, #reset-token-btn').hide();
-                    $('#pathao-settings-save-feedback, #pathao-connection-status-feedback').text('');
+                    if (!credentialsMatchSaved()) {
+                        $('#fetch-token-btn').show();
+                        $('#pathao-save-settings-control, #reset-token-btn, #configure-webhook-btn').hide();
+                    } else if (!webhookMatchesSaved) {
+                        $('#fetch-token-btn, #reset-token-btn, #configure-webhook-btn').hide();
+                        $('#pathao-save-settings-control').show();
+                    } else {
+                        $('#fetch-token-btn, #pathao-save-settings-control').hide();
+                        $('#reset-token-btn, #configure-webhook-btn').show();
+                    }
+                }
+
+                $('#client_id, #client_secret, #client_environment, #webhook_secret').on('input change', function () {
+                    updateSettingsActionState();
+                    $('#pathao-settings-save-feedback, #pathao-connection-status-feedback, #pathao-webhook-status-feedback').text('');
                 });
 
                 function showToast(title, message, type = 'error') {
@@ -389,7 +468,7 @@ function pt_hms_settings_page_callback()
                                 hasSavedCredentials = true;
                                 savedCredentials = currentCredentials();
                                 $('#pathao-save-settings-control').hide();
-                                $('#reset-token-btn').show();
+                                $('#reset-token-btn, #configure-webhook-btn').show();
                                 return;
                             }
 
@@ -487,6 +566,47 @@ function pt_hms_settings_page_callback()
                         },
                         complete: function () {
                             $btn.prop('disabled', false).html('<span class="dashicons dashicons-update" style="margin: 4px 5px 0 0;"></span>Reset Token');
+                        }
+                    });
+                });
+
+                $('#configure-webhook-btn').on('click', function () {
+                    const $btn = $(this);
+                    const $feedback = $('#pathao-webhook-status-feedback');
+                    const originalHtml = $btn.html();
+
+                    $btn.prop('disabled', true).text('Configuring...');
+                    $feedback.css('color', '').text('');
+
+                    $.ajax({
+                        url: ajaxurl,
+                        method: 'POST',
+                        data: {
+                            action: 'pathao_configure_webhook',
+                            security: '<?php echo esc_js(wp_create_nonce('pathao_webhook_configuration_nonce')); ?>'
+                        },
+                        success: function (response) {
+                            if (response.success) {
+                                showToast('Success', response.data.message, 'success');
+                                $feedback.css('color', '#008a20').text('\u2714 ' + response.data.message);
+                                return;
+                            }
+
+                            const message = response.data && response.data.message
+                                ? response.data.message
+                                : 'Webhook configuration failed.';
+                            showToast('Webhook Failed', message);
+                            $feedback.css('color', '#d63638').text('\u2716 ' + message);
+                        },
+                        error: function (xhr) {
+                            const message = xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message
+                                ? xhr.responseJSON.data.message
+                                : 'The webhook could not be configured. Please try again.';
+                            showToast('Webhook Failed', message);
+                            $feedback.css('color', '#d63638').text('\u2716 ' + message);
+                        },
+                        complete: function () {
+                            $btn.prop('disabled', false).html(originalHtml);
                         }
                     });
                 });
@@ -659,8 +779,8 @@ function field_client_secret_callback()
 
 function field_webhook_callback()
 {
-    $baseUrl = get_site_url();
-    echo "{$baseUrl}/wp-json/ptc/v1/webhook";
+    $webhook_url = rest_url('ptc/v1/webhook');
+    echo '<code>' . esc_html($webhook_url) . '</code>';
     echo "<p class='description'>
             This is the default <a href=\"https://merchant.pathao.com/courier/developer-api\">webhook</a> URL that will be used for all orders.
           </p>";
@@ -672,7 +792,7 @@ function field_webhook_secret_callback()
     $clientSecret = $options['client_secret'] ?? '';
     $webhookSecret = $options['webhook_secret'] ?? '';
     $value = $webhookSecret ? $webhookSecret : $clientSecret;
-    echo "<input type='text' name='pt_hms_settings[webhook_secret]' value='{$value}' style='width: 300px;' />";
+    echo "<input type='text' id='webhook_secret' name='pt_hms_settings[webhook_secret]' value='" . esc_attr($value) . "' style='width: 300px;' />";
     echo "<p class='description'>
             The default <a href=\"https://merchant.pathao.com/courier/developer-api\">webhook</a> secret will be your client secret if you don't provide any webhook secret.
             </p>";

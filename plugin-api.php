@@ -155,7 +155,7 @@ function ajax_pt_hms_create_new_order()
     $order = wc_get_order($orderId);
 
     if (!$order) {
-        wp_send_json_error('no_order', 'No order found', 404);
+        return webhookResponse('Webhook accepted; no matching WooCommerce order was found.', 202);
     }
 
     // Call function to create a new order
@@ -380,26 +380,27 @@ function register_custom_endpoint() {
     register_rest_route('ptc/v1', '/webhook', array(
         'methods' => 'POST',
         'callback' => 'ptc_webhook_handler',
-        'permission_callback' => function ($request) {
-
-            if (isset($_SERVER['HTTP_X_PATHAO_SIGNATURE'])) {
-                $client_secret = $_SERVER['HTTP_X_PATHAO_SIGNATURE'];
-                $secret = get_option('pt_hms_settings')['webhook_secret'] ?? null;
-
-                if (!$secret || $client_secret !== $secret) {
-                    return false;
-                }
-
-                return true;
-            }
-            return false;
-        },
+        'permission_callback' => 'ptc_verify_webhook_signature',
     ));
+}
+
+function ptc_verify_webhook_signature($request) {
+    $settings = get_option('pt_hms_settings', array());
+    $settings = is_array($settings) ? $settings : array();
+    $secret = (string)($settings['webhook_secret'] ?? '');
+    if ('' === $secret) {
+        $secret = (string)($settings['client_secret'] ?? '');
+    }
+    $signature = (string)$request->get_header('X-Pathao-Signature');
+
+    return '' !== $secret
+        && '' !== $signature
+        && hash_equals($secret, $signature);
 }
 
 function ptc_webhook_handler($data) {
 
-    $event = $data['event'];
+    $event = $data['event'] ?? '';
 
     if ($event == 'webhook_integration') {
         return webhookResponse('Successfully accepted webhook_integration', 202);
@@ -442,6 +443,13 @@ function ptc_webhook_handler($data) {
  */
 function webhookResponse($message, $statusCode = 200)
 {
+    $settings = get_option('pt_hms_settings', array());
+    $settings = is_array($settings) ? $settings : array();
+    $secret = (string)($settings['webhook_secret'] ?? '');
+    if ('' === $secret) {
+        $secret = (string)($settings['client_secret'] ?? '');
+    }
+
     $response = rest_ensure_response(array(
         'status' => $statusCode,
         'message' => $message,
@@ -449,7 +457,7 @@ function webhookResponse($message, $statusCode = 200)
     ));
 
     $response->set_status($statusCode);
-    $response->header('X-Pathao-Merchant-Webhook-Integration-Secret', 'f3992ecc-59da-4cbe-a049-a13da2018d51');
+    $response->header('X-Pathao-Merchant-Webhook-Integration-Secret', $secret);
     return $response;
 }
 

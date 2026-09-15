@@ -113,6 +113,85 @@ function transformTokenResponse($refresh_response)
     );
 }
 
+function ptc_get_webhook_events()
+{
+    return array(
+        'Order_Created',
+        'Order_Updated',
+        'Pickup_Requested',
+        'Assigned_for_Pickup',
+        'Picked',
+        'Pickup_Failed',
+        'Pickup_Cancelled',
+        'At_the_Sorting_HUB',
+        'In_Transit',
+        'Received_at_Last_Mile_HUB',
+        'Assigned_for_Delivery',
+        'Delivered',
+        'Partial_Delivery',
+        'Return',
+        'Delivery_Failed',
+        'On_Hold',
+        'Payment_Invoice',
+        'paid_return',
+        'exchange',
+        'store_created',
+        'store_updated',
+        'return_id_created',
+        'return_in_transit',
+        'Returned_to_Merchant',
+    );
+}
+
+function ptc_configure_webhook($access_token, $webhook_url, $webhook_secret)
+{
+    $response = wp_safe_remote_post(
+        'https://merchant.pathao.com/api/v1/oauth/client/webhook',
+        array(
+            'timeout' => 30,
+            'redirection' => 3,
+            'httpversion' => '1.1',
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $access_token,
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+            ),
+            'body' => wp_json_encode(array(
+                'events' => ptc_get_webhook_events(),
+                'webhook' => $webhook_url,
+                'webhook_secret' => $webhook_secret,
+            )),
+        )
+    );
+
+    if (is_wp_error($response)) {
+        return $response;
+    }
+
+    $status_code = wp_remote_retrieve_response_code($response);
+    $body = json_decode(wp_remote_retrieve_body($response), true);
+    $body = is_array($body) ? $body : array();
+
+    if ($status_code < 200 || $status_code >= 300 || !empty($body['error'])) {
+        $message = !empty($body['message'])
+            ? sanitize_text_field($body['message'])
+            : __('Pathao rejected the webhook configuration.', 'pathao-courier');
+
+        return new WP_Error(
+            'pathao_webhook_configuration_failed',
+            $message,
+            array(
+                'status' => $status_code,
+                'checks' => isset($body['data']['checks']) && is_array($body['data']['checks'])
+                    ? $body['data']['checks']
+                    : array(),
+            )
+        );
+    }
+
+    return $body;
+}
+
 function pt_hms_get_user()
 {
     $url = get_base_url() . '/aladdin/api/v1/user/short-info';
