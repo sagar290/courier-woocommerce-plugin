@@ -16,7 +16,7 @@ function get_ptc_merchant_panel_base_url($environment = null)
 
 function issue_access_token($clientId = null, $clientSecret = null, $environment = null)
 {
-    // Get settings from WordPress options
+// Get settings from WordPress options
     $options = get_option('pt_hms_settings');
 
     $clientId = ($clientId ?:  $options['client_id']) ?? '';
@@ -146,7 +146,7 @@ function ptc_get_webhook_events()
 function ptc_configure_webhook($access_token, $webhook_url, $webhook_secret)
 {
     $response = wp_safe_remote_post(
-        get_base_url() . '/api/v1/oauth/client/webhook',
+        get_base_url() . '/aladdin/api/v1/oauth/client/webhook',
         array(
             'timeout' => 30,
             'redirection' => 3,
@@ -195,7 +195,7 @@ function ptc_configure_webhook($access_token, $webhook_url, $webhook_secret)
 function ptc_get_webhook_configuration($access_token)
 {
     $response = wp_safe_remote_get(
-        get_base_url() . '/api/v1/oauth/client',
+        get_base_url() . '/aladdin/api/v1/oauth/client',
         array(
             'timeout' => 30,
             'redirection' => 3,
